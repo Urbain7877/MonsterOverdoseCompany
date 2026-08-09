@@ -67,7 +67,6 @@ namespace MonsterOverdoseCompany
             hasSequenceStarted = false;
             SpawnableEnemyWithRarity robotEnemy = manager.currentLevel.OutsideEnemies.Find(e => e.enemyType.enemyName.ToLower().Contains("radmech"));
             if (robotEnemy == null) return;
-            // ... (logique de spawn robots inchangée)
         }
 
         public static IEnumerator WakeUpRobotsSequence()
@@ -115,25 +114,35 @@ namespace MonsterOverdoseCompany
         {
             if (StartOfRound.Instance.allPlayerScripts.Length == 0) return;
             PlayerControllerB targetPlayer = StartOfRound.Instance.allPlayerScripts[Random.Range(0, StartOfRound.Instance.allPlayerScripts.Length)];
-            if (targetPlayer == null || !targetPlayer.isPlayerControlled) return;
+            if (targetPlayer == null || !targetPlayer.isPlayerControlled || targetPlayer.isPlayerDead) return;
+
+            if (manager.currentLevel.Enemies == null || manager.currentLevel.Enemies.Count == 0) return;
 
             SpawnableEnemyWithRarity selectedEnemy = manager.currentLevel.Enemies[Random.Range(0, manager.currentLevel.Enemies.Count)];
-            Vector3 spawnPos = targetPlayer.transform.position + (Random.insideUnitSphere * 15f);
+            Vector3 spawnPos = targetPlayer.transform.position + (Random.insideUnitSphere * Random.Range(5f, 25f));
 
             NavMeshHit hit;
             if (NavMesh.SamplePosition(spawnPos, out hit, 20f, NavMesh.AllAreas))
             {
-                // La correction est ici :
-                GameObject spawnedEnemyObj = manager.SpawnEnemyAndGetIt(hit.position, 0f, manager.currentLevel.Enemies.IndexOf(selectedEnemy));
-                if (spawnedEnemyObj != null)
+                int enemyIndex = manager.currentLevel.Enemies.IndexOf(selectedEnemy);
+                if (enemyIndex != -1)
                 {
-                    EnemyAI enemyAI = spawnedEnemyObj.GetComponent<EnemyAI>();
-                    if (enemyAI != null)
+                    manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
+
+                    if (manager.spawnedEnemies != null && manager.spawnedEnemies.Count > 0)
                     {
-                        enemyAI.isOutside = true; // Force le mode extérieur
-                        enemyAI.allAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
-                        enemyAI.SwitchToBehaviourState(1); // Force l'état actif/hostile
-                        if (enemyAI.agent != null) enemyAI.agent.Warp(hit.position);
+                        EnemyAI enemyAI = manager.spawnedEnemies[manager.spawnedEnemies.Count - 1];
+                        if (enemyAI != null)
+                        {
+                            enemyAI.isOutside = true;
+                            enemyAI.allAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
+                            enemyAI.SwitchToBehaviourState(1);
+                            
+                            if (enemyAI.agent != null)
+                            {
+                                enemyAI.agent.Warp(hit.position);
+                            }
+                        }
                     }
                 }
             }
