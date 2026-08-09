@@ -65,15 +65,60 @@ namespace MonsterOverdoseCompany
         {
             spawnedRobots.Clear();
             hasSequenceStarted = false;
+
+            if (manager.currentLevel.OutsideEnemies == null) return;
             SpawnableEnemyWithRarity robotEnemy = manager.currentLevel.OutsideEnemies.Find(e => e.enemyType.enemyName.ToLower().Contains("radmech"));
             if (robotEnemy == null) return;
+
+            Vector3 shipPosition = Vector3.zero;
+            GameObject shipObj = GameObject.FindWithTag("Ship");
+            if (shipObj != null)
+            {
+                shipPosition = shipObj.transform.position;
+            }
+
+            int spawnedCount = 0;
+            int attempts = 0;
+
+            while (spawnedCount < 15 && attempts < 150)
+            {
+                attempts++;
+                Vector3 randomPoint = shipPosition + (Random.insideUnitSphere * 40f);
+                NavMeshHit hit;
+
+                if (NavMesh.SamplePosition(randomPoint, out hit, 25f, NavMesh.AllAreas))
+                {
+                    if (Vector3.Distance(hit.position, shipPosition) < 20f) continue;
+
+                    int enemyIndex = manager.currentLevel.OutsideEnemies.IndexOf(robotEnemy);
+                    if (enemyIndex != -1)
+                    {
+                        manager.SpawnOutsideEnemy(hit.position, 0f, enemyIndex);
+                        
+                        EnemyAI[] allActiveEnemies = Object.FindObjectsOfType<EnemyAI>();
+                        foreach (EnemyAI robot in allActiveEnemies)
+                        {
+                            if (robot != null && !spawnedRobots.Contains(robot) && Vector3.Distance(robot.transform.position, hit.position) < 3f)
+                            {
+                                spawnedRobots.Add(robot);
+                                spawnedCount++;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots générés dehors.");
         }
 
         public static IEnumerator WakeUpRobotsSequence()
         {
             foreach (EnemyAI robot in spawnedRobots)
             {
-                if (robot != null && !robot.isEnemyDead) robot.SwitchToBehaviourState(1);
+                if (robot != null && !robot.isEnemyDead)
+                {
+                    robot.SwitchToBehaviourState(1);
+                }
                 yield return new WaitForSeconds(10f);
             }
         }
@@ -93,6 +138,7 @@ namespace MonsterOverdoseCompany
             hasPlayerEntered = false;
             gameTimer = 0f;
             spawnIntervalTimer = 0f;
+            RobotManager.InitRobots(__instance);
         }
 
         [HarmonyPatch("Update")]
@@ -129,18 +175,21 @@ namespace MonsterOverdoseCompany
                 {
                     manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
 
-                    if (manager.spawnedEnemies != null && manager.spawnedEnemies.Count > 0)
+                    EnemyAI[] allActiveEnemies = Object.FindObjectsOfType<EnemyAI>();
+                    if (allActiveEnemies.Length > 0)
                     {
-                        EnemyAI enemyAI = manager.spawnedEnemies[manager.spawnedEnemies.Count - 1];
-                        if (enemyAI != null)
+                        foreach (EnemyAI enemyAI in allActiveEnemies)
                         {
-                            enemyAI.isOutside = true;
-                            enemyAI.allAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
-                            enemyAI.SwitchToBehaviourState(1);
-                            
-                            if (enemyAI.agent != null)
+                            if (enemyAI != null && !enemyAI.isOutside && Vector3.Distance(enemyAI.transform.position, hit.position) < 3f)
                             {
-                                enemyAI.agent.Warp(hit.position);
+                                enemyAI.isOutside = true;
+                                enemyAI.allAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
+                                enemyAI.SwitchToBehaviourState(1);
+                                
+                                if (enemyAI.agent != null)
+                                {
+                                    enemyAI.agent.Warp(hit.position);
+                                }
                             }
                         }
                     }
