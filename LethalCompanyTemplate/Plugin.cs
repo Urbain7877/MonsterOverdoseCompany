@@ -225,11 +225,18 @@ namespace MonsterOverdoseCompany
             NavMeshHit hit;
             if (NavMesh.SamplePosition(spawnPos, out hit, 30f, NavMesh.AllAreas))
             {
-                GameObject enemyObj = Object.Instantiate(selectedEnemy.enemyType.enemyPrefab, hit.position, Quaternion.identity);
-                EnemyAI enemyAI = enemyObj.GetComponent<EnemyAI>();
-                if (enemyAI != null)
+                int enemyIndex = manager.currentLevel.Enemies.IndexOf(selectedEnemy);
+                if (enemyIndex != -1)
                 {
-                    manager.SpawnEnemyOnServer(hit.position, 0f, manager.currentLevel.Enemies.IndexOf(selectedEnemy));
+                    manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
+                }
+                else
+                {
+                    int outsideIndex = manager.currentLevel.OutsideEnemies.IndexOf(selectedEnemy);
+                    if (outsideIndex != -1)
+                    {
+                        manager.SpawnOutsideEnemy(hit.position, outsideIndex);
+                    }
                 }
             }
         }
