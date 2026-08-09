@@ -97,32 +97,24 @@ namespace MonsterOverdoseCompany
                     int enemyIndex = manager.currentLevel.OutsideEnemies.IndexOf(robotEnemy);
                     if (enemyIndex != -1)
                     {
-                        GameObject spawnedEnemyObj = manager.SpawnEnemyGameObject(hit.position, 0f, enemyIndex, true);
-                        if (spawnedEnemyObj != null)
-                        {
-                            EnemyAI enemyAI = spawnedEnemyObj.GetComponent<EnemyAI>();
-                            if (enemyAI != null)
-                            {
-                                enemyAI.isOutside = true;
-                                spawnedRobots.Add(enemyAI);
-                                spawnedCount++;
-                            }
-                        }
+                        manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
+                        spawnedCount++;
                     }
                 }
             }
-            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots générés proprement dehors.");
+            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots générés dehors.");
         }
 
         public static IEnumerator WakeUpRobotsSequence()
         {
-            foreach (EnemyAI robot in spawnedRobots)
+            EnemyAI[] allActiveEnemies = Object.FindObjectsOfType<EnemyAI>();
+            foreach (EnemyAI robot in allActiveEnemies)
             {
                 if (robot != null && !robot.isEnemyDead)
                 {
                     robot.SwitchToBehaviourState(1);
+                    yield return new WaitForSeconds(3f);
                 }
-                yield return new WaitForSeconds(5f);
             }
         }
     }
@@ -182,23 +174,7 @@ namespace MonsterOverdoseCompany
                 int enemyIndex = manager.currentLevel.Enemies.IndexOf(selectedEnemy);
                 if (enemyIndex != -1)
                 {
-                    // Spawn direct via l'instanciation de GameObject pour récupérer immédiatement son composant et éviter le lag de recherche globale
-                    GameObject spawnedEnemyObj = manager.SpawnEnemyGameObject(hit.position, 0f, enemyIndex, true);
-                    if (spawnedEnemyObj != null)
-                    {
-                        EnemyAI enemyAI = spawnedEnemyObj.GetComponent<EnemyAI>();
-                        if (enemyAI != null)
-                        {
-                            enemyAI.isOutside = true;
-                            enemyAI.allAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
-                            enemyAI.SwitchToBehaviourState(1);
-                            
-                            if (enemyAI.agent != null)
-                            {
-                                enemyAI.agent.Warp(hit.position);
-                            }
-                        }
-                    }
+                    manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
                 }
             }
         }
