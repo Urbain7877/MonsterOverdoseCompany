@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.AI;
 using System.Collections.Generic;
 using System.Collections;
+using GameNetcodeStuff;
 
 namespace MonsterOverdoseCompany
 {
@@ -50,28 +51,26 @@ namespace MonsterOverdoseCompany
         [HarmonyPostfix]
         static void Postfix(bool ___isEntranceToBuilding)
         {
-            // Entrée dans le complexe
             if (___isEntranceToBuilding && !ChaosManager.hasPlayerEntered)
             {
                 ChaosManager.hasPlayerEntered = true;
                 Debug.Log("[Monster-Overdose-Company] Joueur entre ! Chrono activé.");
             }
-            // Sortie du complexe
             else if (!___isEntranceToBuilding && ChaosManager.hasPlayerEntered && !RobotManager.hasSequenceStarted)
             {
                 RobotManager.hasSequenceStarted = true;
                 Plugin.Instance.StartCoroutine(RobotManager.WakeUpRobotsSequence());
-                Debug.Log("[Monster-Overdose-Company] Joueur sort ! Lancement du réveil progressif des 25 robots !");
+                Debug.Log("[Monster-Overdose-Company] Joueur sort ! Lancement du réveil progressif des robots !");
             }
         }
     }
 
     // ==========================================
-    // 3. GESTION DES 25 ROBOTS (ZONE SÉCURISÉE VAISSEAU DE 20M)
+    // 3. GESTION DES ROBOTS
     // ==========================================
     public class RobotManager
     {
-        public static List<RadMechAI> spawnedRobots = new List<RadMechAI>();
+        public static List<EnemyAI> spawnedRobots = new List<EnemyAI>();
         public static bool hasSequenceStarted = false;
 
         public static void InitRobots(RoundManager manager)
@@ -88,50 +87,40 @@ namespace MonsterOverdoseCompany
             {
                 shipPosition = shipObj.transform.position;
             }
-            else if (StartOfRound.Instance != null && StartOfRound.Instance.elevatorTransform != null)
-            {
-                shipPosition = StartOfRound.Instance.elevatorTransform.position;
-            }
 
             int spawnedCount = 0;
             int attempts = 0;
 
-            while (spawnedCount < 25 && attempts < 200)
+            while (spawnedCount < 15 && attempts < 150)
             {
                 attempts++;
-                Vector3 randomPoint = manager.outsideRadius * Random.insideUnitSphere;
+                Vector3 randomPoint = Random.insideUnitSphere * 40f;
                 NavMeshHit hit;
 
-                if (NavMesh.SamplePosition(randomPoint, out hit, 50f, NavMesh.AllAreas))
+                if (NavMesh.SamplePosition(randomPoint, out hit, 25f, NavMesh.AllAreas))
                 {
-                    float distanceToShip = Vector3.Distance(hit.position, shipPosition);
-                    if (distanceToShip < 20f)
-                    {
-                        continue; 
-                    }
+                    if (Vector3.Distance(hit.position, shipPosition) < 20f) continue;
 
                     GameObject obj = Object.Instantiate(robotEnemy.enemyType.enemyPrefab, hit.position, Quaternion.identity);
-                    RadMechAI robot = obj.GetComponent<RadMechAI>();
+                    EnemyAI robot = obj.GetComponent<EnemyAI>();
                     if (robot != null)
                     {
-                        robot.inFlight = false;
-                        robot.creatureSFX.Stop();
                         spawnedRobots.Add(robot);
                         spawnedCount++;
                     }
                 }
             }
-            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots désactivés générés dehors.");
+            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots générés dehors.");
         }
 
         public static IEnumerator WakeUpRobotsSequence()
         {
-            foreach (RadMechAI robot in spawnedRobots)
+            foreach (EnemyAI robot in spawnedRobots)
             {
                 if (robot != null && !robot.isEnemyDead)
                 {
-                    robot.SwitchToBehaviourState(1); 
-                    Debug.Log("[Monster-Overdose-Company] Un robot vient de se réveiller !");
+                    robot.SwitchToBehaviourState(1);
+                    Debug.Log("[Monster-Overdose-Company] Un robot se réveille !");
                 }
                 yield return new WaitForSeconds(10f);
             }
@@ -168,20 +157,15 @@ namespace MonsterOverdoseCompany
             spawnIntervalTimer += Time.deltaTime;
 
             int currentMaxEnemies = 10 + (int)(gameTimer / 120f) * 10;
-            if (currentMaxEnemies > 60) currentMaxEnemies = 60;
+            if (currentMaxEnemies > 50) currentMaxEnemies = 50;
 
             __instance.currentLevel.maxEnemyPowerCount = currentMaxEnemies;
             __instance.currentLevel.maxOutsideEnemyPowerCount = currentMaxEnemies;
 
-            if (spawnIntervalTimer >= 10f)
+            if (spawnIntervalTimer >= 15f)
             {
                 spawnIntervalTimer = 0f;
-                float chance = (gameTimer < 120f) ? 0.30f : 0.85f;
-
-                if (Random.value <= chance)
-                {
-                    TrySpawnChaosEnemy(__instance);
-                }
+                TrySpawnChaosEnemy(__instance);
             }
 
             if (gameTimer >= 300f)
@@ -192,42 +176,25 @@ namespace MonsterOverdoseCompany
 
         static void TrySpawnChaosEnemy(RoundManager manager)
         {
+            if (StartOfRound.Instance.allPlayerScripts.Length == 0) return;
             PlayerControllerB targetPlayer = StartOfRound.Instance.allPlayerScripts[Random.Range(0, StartOfRound.Instance.allPlayerScripts.Length)];
             if (targetPlayer == null || !targetPlayer.isPlayerControlled || targetPlayer.isPlayerDead) return;
 
             List<SpawnableEnemyWithRarity> allEnemies = new List<SpawnableEnemyWithRarity>();
             if (manager.currentLevel.Enemies != null) allEnemies.AddRange(manager.currentLevel.Enemies);
-            if (manager.currentLevel.OutsideEnemies != null) allEnemies.AddRange(manager.currentLevel.OutsideEnemies);
 
             if (allEnemies.Count == 0) return;
 
             SpawnableEnemyWithRarity selectedEnemy = allEnemies[Random.Range(0, allEnemies.Count)];
-            string enemyName = selectedEnemy.enemyType.enemyName.ToLower();
-
-            bool isRobot = enemyName.Contains("radmech") || enemyName.Contains("old bird");
-            bool isLeviathan = enemyName.Contains("sandworm") || enemyName.Contains("ver");
-            bool isInside = targetPlayer.isInsideFactory;
-
-            if (isInside && isRobot) return;
-            if (isLeviathan && gameTimer < 420f) return;
-
-            Vector3 spawnPos = targetPlayer.transform.position + (Random.insideUnitSphere * Random.Range(5f, 30f));
+            Vector3 spawnPos = targetPlayer.transform.position + (Random.insideUnitSphere * Random.Range(5f, 25f));
 
             NavMeshHit hit;
-            if (NavMesh.SamplePosition(spawnPos, out hit, 30f, NavMesh.AllAreas))
+            if (NavMesh.SamplePosition(spawnPos, out hit, 20f, NavMesh.AllAreas))
             {
                 int enemyIndex = manager.currentLevel.Enemies.IndexOf(selectedEnemy);
                 if (enemyIndex != -1)
                 {
                     manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
-                }
-                else
-                {
-                    int outsideIndex = manager.currentLevel.OutsideEnemies.IndexOf(selectedEnemy);
-                    if (outsideIndex != -1)
-                    {
-                        manager.SpawnOutsideEnemy(hit.position, outsideIndex);
-                    }
                 }
             }
         }
@@ -238,16 +205,13 @@ namespace MonsterOverdoseCompany
             foreach (EnemyAI enemy in enemies)
             {
                 if (enemy.isEnemyDead) continue;
-                if (enemy is HoarderBugAI bug) bug.AngryAtPlayer(StartOfRound.Instance.allPlayerScripts[0]);
-                if (enemy is PufferAI lizard) lizard.creatureSFX.Play(); 
-                if (enemy is BaboonBirdAI baboon) baboon.threatened = true;
-                if (enemy is CrawlerAI spider) spider.makeClingSound = true;
+                enemy.SwitchToBehaviourState(1);
             }
         }
     }
 
     // ==========================================
-    // 5. RÈGLE LÉVIATHAN (7 MIN & 20M)
+    // 5. RÈGLE LÉVIATHAN
     // ==========================================
     [HarmonyPatch(typeof(SandWormAI))]
     public class LeviathanIndoorPatch
@@ -256,7 +220,7 @@ namespace MonsterOverdoseCompany
         [HarmonyPostfix]
         static void CustomLeviathanMovement(SandWormAI __instance)
         {
-            if (__instance.isInsideFactory && __instance.targetPlayer != null && ChaosManager.gameTimer >= 420f)
+            if (__instance.targetPlayer != null && ChaosManager.gameTimer >= 420f)
             {
                 if (__instance.agent == null)
                 {
@@ -266,16 +230,10 @@ namespace MonsterOverdoseCompany
                 if (__instance.agent != null && __instance.agent.isOnNavMesh)
                 {
                     float distance = Vector3.Distance(__instance.transform.position, __instance.targetPlayer.transform.position);
-                    __instance.openDoorSpeed = 0f;
-
                     if (distance > 20f)
                     {
-                        __instance.agent.speed = 22f; 
+                        __instance.agent.speed = 20f;
                         __instance.SetDestinationToPosition(__instance.targetPlayer.transform.position);
-                    }
-                    else
-                    {
-                        __instance.agent.speed = 5f; 
                     }
                 }
             }
