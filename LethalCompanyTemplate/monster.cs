@@ -79,11 +79,9 @@ namespace MonsterOverdoseCompany
             spawnedRobots.Clear();
             hasSequenceStarted = false;
 
-            // Cherche le prefab du RadMech / Old Bird
             SpawnableEnemyWithRarity robotEnemy = manager.currentLevel.OutsideEnemies.Find(e => e.enemyType.enemyName.ToLower().Contains("radmech"));
             if (robotEnemy == null) return;
 
-            // Repère la position exacte du vaisseau (zone d'atterrissage)
             Vector3 shipPosition = Vector3.zero;
             GameObject shipObj = GameObject.FindWithTag("Ship");
             if (shipObj != null)
@@ -98,7 +96,6 @@ namespace MonsterOverdoseCompany
             int spawnedCount = 0;
             int attempts = 0;
 
-            // Génère 25 robots désactivés à l'extérieur
             while (spawnedCount < 25 && attempts < 200)
             {
                 attempts++;
@@ -107,18 +104,16 @@ namespace MonsterOverdoseCompany
 
                 if (NavMesh.SamplePosition(randomPoint, out hit, 50f, NavMesh.AllAreas))
                 {
-                    // RÈGLE SÉCURITÉ : Interdiction stricte de spawner à moins de 20 mètres du vaisseau
                     float distanceToShip = Vector3.Distance(hit.position, shipPosition);
                     if (distanceToShip < 20f)
                     {
-                        continue; // Zone d'atterrissage préservée, on cherche un autre endroit
+                        continue; 
                     }
 
                     GameObject obj = Object.Instantiate(robotEnemy.enemyType.enemyPrefab, hit.position, Quaternion.identity);
                     RadMechAI robot = obj.GetComponent<RadMechAI>();
                     if (robot != null)
                     {
-                        // Robot initialement éteint / désactivé
                         robot.inFlight = false;
                         robot.creatureSFX.Stop();
                         spawnedRobots.Add(robot);
@@ -126,10 +121,9 @@ namespace MonsterOverdoseCompany
                     }
                 }
             }
-            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots désactivés générés dehors (zone de 20m autour du vaisseau préservée).");
+            Debug.Log($"[Monster-Overdose-Company] {spawnedCount} robots désactivés générés dehors.");
         }
 
-        // Coroutine pour réveiller 1 robot toutes les 10 secondes
         public static IEnumerator WakeUpRobotsSequence()
         {
             foreach (RadMechAI robot in spawnedRobots)
@@ -139,7 +133,7 @@ namespace MonsterOverdoseCompany
                     robot.SwitchToBehaviourState(1); 
                     Debug.Log("[Monster-Overdose-Company] Un robot vient de se réveiller !");
                 }
-                yield return new WaitForSeconds(10f); // Réveil individuel toutes les 10s
+                yield return new WaitForSeconds(10f);
             }
         }
     }
@@ -173,14 +167,12 @@ namespace MonsterOverdoseCompany
             gameTimer += Time.deltaTime;
             spawnIntervalTimer += Time.deltaTime;
 
-            // Augmentation du cap de monstres (+10 toutes les 2 min, max 60)
             int currentMaxEnemies = 10 + (int)(gameTimer / 120f) * 10;
             if (currentMaxEnemies > 60) currentMaxEnemies = 60;
 
             __instance.currentLevel.maxEnemyPowerCount = currentMaxEnemies;
             __instance.currentLevel.maxOutsideEnemyPowerCount = currentMaxEnemies;
 
-            // Tentative de spawn toutes les 10s (30% puis 85%)
             if (spawnIntervalTimer >= 10f)
             {
                 spawnIntervalTimer = 0f;
@@ -192,7 +184,6 @@ namespace MonsterOverdoseCompany
                 }
             }
 
-            // Après 5 minutes : Passage en 100% Hostile
             if (gameTimer >= 300f)
             {
                 MakeAllEnemiesHostile();
@@ -213,12 +204,12 @@ namespace MonsterOverdoseCompany
             SpawnableEnemyWithRarity selectedEnemy = allEnemies[Random.Range(0, allEnemies.Count)];
             string enemyName = selectedEnemy.enemyType.enemyName.ToLower();
 
-            bool isRobot = enemyName.Contains("radmech") || enemyName.Contains("vieux gardien") || enemyName.Contains("old bird");
-            bool isLeviathan = enemyName.Contains("sandworm") || enemyName.Contains("ver") || enemyName.Contains("leviathan");
+            bool isRobot = enemyName.Contains("radmech") || enemyName.Contains("old bird");
+            bool isLeviathan = enemyName.Contains("sandworm") || enemyName.Contains("ver");
             bool isInside = targetPlayer.isInsideFactory;
 
             if (isInside && isRobot) return;
-            if (isLeviathan && gameTimer < 420f) return; // Léviathan uniquement à partir de 7 min
+            if (isLeviathan && gameTimer < 420f) return;
 
             Vector3 spawnPos = targetPlayer.transform.position + (Random.insideUnitSphere * Random.Range(5f, 30f));
 
@@ -265,7 +256,6 @@ namespace MonsterOverdoseCompany
         [HarmonyPostfix]
         static void CustomLeviathanMovement(SandWormAI __instance)
         {
-            // Uniquement en intérieur ET après 7 minutes
             if (__instance.isInsideFactory && __instance.targetPlayer != null && ChaosManager.gameTimer >= 420f)
             {
                 if (__instance.agent == null)
@@ -278,13 +268,11 @@ namespace MonsterOverdoseCompany
                     float distance = Vector3.Distance(__instance.transform.position, __instance.targetPlayer.transform.position);
                     __instance.openDoorSpeed = 0f;
 
-                    // Hors du périmètre de 20m -> Sprint à 80 km/h (22f)
                     if (distance > 20f)
                     {
                         __instance.agent.speed = 22f; 
                         __instance.SetDestinationToPosition(__instance.targetPlayer.transform.position);
                     }
-                    // Dans le périmètre de 20m -> Redevient normal (5f)
                     else
                     {
                         __instance.agent.speed = 5f; 
