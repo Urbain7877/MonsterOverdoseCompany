@@ -17,7 +17,7 @@ namespace MonsterOverdoseCompany
         void Awake()
         {
             Instance = this;
-            Logger.LogInfo("[Monster-Overdose-Company] Mod chargé !");
+            Logger.LogInfo("[Monster-Overdose-Company] Mod chargé avec succès !");
             harmony.PatchAll();
         }
     }
@@ -51,7 +51,10 @@ namespace MonsterOverdoseCompany
             else if (!___isEntranceToBuilding && ChaosManager.hasPlayerEntered && !RobotManager.hasSequenceStarted)
             {
                 RobotManager.hasSequenceStarted = true;
-                Plugin.Instance.StartCoroutine(RobotManager.WakeUpRobotsSequence());
+                if (Plugin.Instance != null)
+                {
+                    Plugin.Instance.StartCoroutine(RobotManager.WakeUpRobotsSequence());
+                }
             }
         }
     }
@@ -66,8 +69,9 @@ namespace MonsterOverdoseCompany
             spawnedRobots.Clear();
             hasSequenceStarted = false;
 
-            if (manager.currentLevel.OutsideEnemies == null) return;
-            SpawnableEnemyWithRarity robotEnemy = manager.currentLevel.OutsideEnemies.Find(e => e.enemyType.enemyName.ToLower().Contains("radmech"));
+            if (manager == null || manager.currentLevel == null || manager.currentLevel.OutsideEnemies == null) return;
+            
+            SpawnableEnemyWithRarity robotEnemy = manager.currentLevel.OutsideEnemies.Find(e => e.enemyType != null && e.enemyType.enemyName != null && e.enemyType.enemyName.ToLower().Contains("radmech"));
             if (robotEnemy == null) return;
 
             Vector3 shipPosition = Vector3.zero;
@@ -93,7 +97,7 @@ namespace MonsterOverdoseCompany
                     int enemyIndex = manager.currentLevel.OutsideEnemies.IndexOf(robotEnemy);
                     if (enemyIndex != -1)
                     {
-                        manager.SpawnOutsideEnemy(hit.position, 0f, enemyIndex);
+                        manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
                         
                         EnemyAI[] allActiveEnemies = Object.FindObjectsOfType<EnemyAI>();
                         foreach (EnemyAI robot in allActiveEnemies)
@@ -154,11 +158,17 @@ namespace MonsterOverdoseCompany
                 spawnIntervalTimer = 0f;
                 TrySpawnChaosEnemy(__instance);
             }
+
+            if (gameTimer >= 300f)
+            {
+                MakeAllEnemiesHostile();
+            }
         }
 
         static void TrySpawnChaosEnemy(RoundManager manager)
         {
-            if (StartOfRound.Instance.allPlayerScripts.Length == 0) return;
+            if (StartOfRound.Instance == null || StartOfRound.Instance.allPlayerScripts == null || StartOfRound.Instance.allPlayerScripts.Length == 0) return;
+            
             PlayerControllerB targetPlayer = StartOfRound.Instance.allPlayerScripts[Random.Range(0, StartOfRound.Instance.allPlayerScripts.Length)];
             if (targetPlayer == null || !targetPlayer.isPlayerControlled || targetPlayer.isPlayerDead) return;
 
@@ -192,6 +202,45 @@ namespace MonsterOverdoseCompany
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        static void MakeAllEnemiesHostile()
+        {
+            EnemyAI[] enemies = Object.FindObjectsOfType<EnemyAI>();
+            foreach (EnemyAI enemy in enemies)
+            {
+                if (enemy != null && !enemy.isEnemyDead)
+                {
+                    enemy.SwitchToBehaviourState(1);
+                }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(SandWormAI))]
+    public class LeviathanIndoorPatch
+    {
+        [HarmonyPatch("Update")]
+        [HarmonyPostfix]
+        static void CustomLeviathanMovement(SandWormAI __instance)
+        {
+            if (__instance != null && __instance.targetPlayer != null && ChaosManager.gameTimer >= 420f)
+            {
+                if (__instance.agent == null)
+                {
+                    __instance.agent = __instance.gameObject.GetComponent<NavMeshAgent>();
+                }
+
+                if (__instance.agent != null && __instance.agent.isOnNavMesh)
+                {
+                    float distance = Vector3.Distance(__instance.transform.position, __instance.targetPlayer.transform.position);
+                    if (distance > 20f)
+                    {
+                        __instance.agent.speed = 20f;
+                        __instance.SetDestinationToPosition(__instance.targetPlayer.transform.position);
                     }
                 }
             }
