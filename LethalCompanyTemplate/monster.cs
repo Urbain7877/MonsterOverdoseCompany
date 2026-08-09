@@ -150,6 +150,9 @@ namespace MonsterOverdoseCompany
                 TrySpawnChaosEnemy(__instance);
             }
 
+            // Vérification continue pour infliger des dégâts au corps à corps
+            CheckMonsterMeleeAttacks();
+
             if (gameTimer >= 300f)
             {
                 MakeAllEnemiesHostile();
@@ -175,6 +178,38 @@ namespace MonsterOverdoseCompany
                 if (enemyIndex != -1)
                 {
                     manager.SpawnEnemyOnServer(hit.position, 0f, enemyIndex);
+                }
+            }
+        }
+
+        static void CheckMonsterMeleeAttacks()
+        {
+            if (StartOfRound.Instance == null || StartOfRound.Instance.allPlayerScripts == null) return;
+
+            EnemyAI[] allEnemies = Object.FindObjectsOfType<EnemyAI>();
+            foreach (EnemyAI enemy in allEnemies)
+            {
+                if (enemy == null || enemy.isEnemyDead) continue;
+
+                foreach (PlayerControllerB player in StartOfRound.Instance.allPlayerScripts)
+                {
+                    if (player == null || !player.isPlayerControlled || player.isPlayerDead) continue;
+
+                    float distance = Vector3.Distance(enemy.transform.position, player.transform.position);
+                    // Si le monstre est à moins de 2.5 mètres, il attaque et met des dégâts
+                    if (distance < 2.5f)
+                    {
+                        if (enemy.currentBehaviourStateIndex != 1)
+                        {
+                            enemy.SwitchToBehaviourState(1);
+                        }
+
+                        // Inflige 30 dégâts avec une petite sécurité de timing pour éviter de one-shot instantanément à chaque frame
+                        if (Random.value < 0.08f)
+                        {
+                            player.DamagePlayer(30, true, true, CauseOfDeath.Mauling, 0);
+                        }
+                    }
                 }
             }
         }
